@@ -58,7 +58,8 @@ echo "iDRAC/IPMI host: $IDRAC_HOST"
 
 # Log the fan speed objective, CPU temperature threshold and check interval
 echo "Fan speed objective: $DECIMAL_FAN_SPEED%"
-echo "CPU temperature threshold: $CPU_TEMPERATURE_THRESHOLD°C"
+echo "CPU temperature high threshold: $CPU_TEMPERATURE_THRESHOLD°C"
+echo "CPU temperature low threshold: $CPU_TEMPERATURE_LOW_THRESHOLD°C"
 echo "Check interval: ${CHECK_INTERVAL}s"
 echo ""
 
@@ -96,36 +97,23 @@ while true; do
   # Initialize a variable to store the comments displayed when the fan control profile changed
   COMMENT=" -"
   # Check if CPU 1 is overheating then apply Dell default dynamic fan control profile if true
-  if CPU1_OVERHEATING; then
+  if [[ CPU1_OVERHEATING || ($IS_CPU2_TEMPERATURE_SENSOR_PRESENT && CPU2_OVERHEATING) ]]; then
     apply_Dell_fan_control_profile
 
     if ! $IS_DELL_FAN_CONTROL_PROFILE_APPLIED; then
       IS_DELL_FAN_CONTROL_PROFILE_APPLIED=true
-
-      # If CPU 2 temperature sensor is present, check if it is overheating too.
-      # Do not apply Dell default dynamic fan control profile as it has already been applied before
-      if $IS_CPU2_TEMPERATURE_SENSOR_PRESENT && CPU2_OVERHEATING; then
-        COMMENT="CPU 1 and CPU 2 temperatures are too high, Dell default dynamic fan control profile applied for safety"
-      else
-        COMMENT="CPU 1 temperature is too high, Dell default dynamic fan control profile applied for safety"
-      fi
+      COMMENT="CPU temperature is too high; Dell default dynamic fan control profile applied for safety"
     fi
-  # If CPU 2 temperature sensor is present, check if it is overheating then apply Dell default dynamic fan control profile if true
-  elif $IS_CPU2_TEMPERATURE_SENSOR_PRESENT && CPU2_OVERHEATING; then
-    apply_Dell_fan_control_profile
-
-    if ! $IS_DELL_FAN_CONTROL_PROFILE_APPLIED; then
-      IS_DELL_FAN_CONTROL_PROFILE_APPLIED=true
-      COMMENT="CPU 2 temperature is too high, Dell default dynamic fan control profile applied for safety"
-    fi
-  else
+  # if temperatures are below the low threshold, apply the user fan control profile
+  elif [[ CPU1_UNDER_LOW_THRESHOLD && ( ( ! $IS_CPU2_TEMPERATURE_SENSOR_PRESENT ) || CPU2_UNDER_LOW_THRESHOLD ) ]]; then
     apply_user_fan_control_profile
 
     # Check if user fan control profile is applied then apply it if not
     if $IS_DELL_FAN_CONTROL_PROFILE_APPLIED; then
       IS_DELL_FAN_CONTROL_PROFILE_APPLIED=false
-      COMMENT="CPU temperature decreased and is now OK (<= $CPU_TEMPERATURE_THRESHOLD°C), user's fan control profile applied."
+      COMMENT="CPU temperature decreased and is now OK (<= $CPU_TEMPERATURE_THRESHOLD°C); user's fan control profile applied."
     fi
+
   fi
 
   # If server model is Gen 14 (*40) or newer
