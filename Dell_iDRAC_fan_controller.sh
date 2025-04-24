@@ -96,23 +96,33 @@ while true; do
 
   # Initialize a variable to store the comments displayed when the fan control profile changed
   COMMENT=" -"
-  # Check if CPU 1 is overheating then apply Dell default dynamic fan control profile if true
-  if [[ CPU1_OVERHEATING || ($IS_CPU2_TEMPERATURE_SENSOR_PRESENT && CPU2_OVERHEATING) ]]; then
+
+  # if a CPU is overheating then apply Dell default dynamic fan control profile
+  if [[ ($CPU1_TEMPERATURE -gt $CPU_TEMPERATURE_THRESHOLD) || ($IS_CPU2_TEMPERATURE_SENSOR_PRESENT && ($CPU1_TEMPERATURE -gt $CPU_TEMPERATURE_THRESHOLD)) ]]; then
     apply_Dell_fan_control_profile
 
     if ! $IS_DELL_FAN_CONTROL_PROFILE_APPLIED; then
       IS_DELL_FAN_CONTROL_PROFILE_APPLIED=true
       COMMENT="CPU temperature is too high; Dell default dynamic fan control profile applied for safety"
     fi
-  # if temperatures are below the low threshold, apply the user fan control profile
-  elif [[ CPU1_UNDER_LOW_THRESHOLD && ( ( ! $IS_CPU2_TEMPERATURE_SENSOR_PRESENT ) || CPU2_UNDER_LOW_THRESHOLD ) ]]; then
+
+  # if CPU temperature(s) are below the low threshold then apply the user fan control profile
+  elif [[ ($CPU1_TEMPERATURE -lt $CPU_TEMPERATURE_LOW_THRESHOLD) \
+	   && ( ( ! $IS_CPU2_TEMPERATURE_SENSOR_PRESENT ) || ($CPU2_TEMPERATURE -lt $CPU_TEMPERATURE_LOW_THRESHOLD) ) ]]; then
     apply_user_fan_control_profile
 
     # Check if user fan control profile is applied then apply it if not
     if $IS_DELL_FAN_CONTROL_PROFILE_APPLIED; then
       IS_DELL_FAN_CONTROL_PROFILE_APPLIED=false
-      COMMENT="CPU temperature decreased and is now OK (<= $CPU_TEMPERATURE_THRESHOLD°C); user's fan control profile applied."
+      COMMENT="CPU temperature decreased and is now OK (<= $CPU_TEMPERATURE_LOW_THRESHOLD°C); user's fan control profile applied."
     fi
+
+  # also apply the user fan control profile if we're below the high threshold but don't currently know which profile is active (e.g. at startup)
+  elif [[ ( -z "$CURRENT_FAN_CONTROL_PROFILE" ) ]]; then
+    apply_user_fan_control_profile
+
+    IS_DELL_FAN_CONTROL_PROFILE_APPLIED=false
+    COMMENT="Initial CPU temperature is below the high threshold; user's fan control profile applied."
 
   fi
 
